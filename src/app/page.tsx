@@ -1,101 +1,129 @@
-import Image from "next/image";
+"use client";
+
+import { FormEvent, useEffect, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import { AIMessageChunk } from "@langchain/core/messages";
+import Chatbot from "@/api/llm";
+
+interface IMessage {
+  type: "user" | "llm";
+  text: string;
+}
+
+let startResponse = false;
+
+const chatbot = new Chatbot;
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="https://nextjs.org/icons/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+  const [prompt, setPrompt] = useState("");
+  const [messages, setMessages] = useState<IMessage[]>([]);
+  const [loading, setLoading] = useState(false);
+  const messageEndRef = useRef<HTMLDivElement>(null);
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="https://nextjs.org/icons/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+  useEffect(() => {
+    messageEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+
+    appendMessages({
+      type: "user",
+      text: prompt,
+    });
+    setPrompt("");
+    setLoading(true);
+    await chatbot.askStream(prompt, handleChunk);
+    setLoading(false);
+    startResponse = false;
+  };
+
+  const handleChunk = (chuck: AIMessageChunk) => {
+    if (!startResponse) {
+      appendMessages({
+        type: "llm",
+        text: chuck.content.toString(),
+      });
+
+      startResponse = true;
+    } else {
+      replaceMessage({
+        type: "llm",
+        text: chuck.content.toString(),
+      });
+    }
+  };
+
+  const appendMessages = (message: IMessage) => {
+    setMessages((pre) => [...pre, message]);
+  };
+
+  const replaceMessage = (message: IMessage) => {
+    setMessages((prev) => {
+      // Tạo một bản sao của mảng trước đó
+      const newItems = [...prev];
+
+      // Thay thế phần tử cuối cùng bằng giá trị mới
+      newItems[newItems.length - 1] = message;
+
+      // Trả về mảng mới
+      return newItems;
+    });
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+      <div className="bg-white h-screen p-6 rounded-lg shadow-lg w-full flex flex-col space-y-4">
+        <h1 className="text-2xl font-bold text-center mb-4">Chat với LLM</h1>
+
+        {/* Vùng hiển thị các tin nhắn */}
+        <div className="flex-1 overflow-y-auto space-y-4 p-4 bg-gray-50 rounded-lg h-96">
+          {" "}
+          {/* Thêm height và overflow */}
+          {messages.map((message, index) => (
+            <div
+              key={index}
+              className={`flex ${
+                message.type === "user" ? "justify-end" : "justify-start"
+              }`}
+            >
+              <div
+                className={`px-4 py-2 rounded-lg ${
+                  message.type === "user"
+                    ? "bg-blue-500 text-white"
+                    : "bg-gray-200 text-gray-800"
+                }`}
+              >
+                <ReactMarkdown className="prose-sm prose-blue">
+                  {message.text}
+                </ReactMarkdown>
+              </div>
+            </div>
+          ))}
+          {/* Cuộn xuống cuối danh sách */}
+          <div ref={messageEndRef} />
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
+
+        {/* Form nhập dữ liệu */}
+        <form onSubmit={handleSubmit} className="flex space-x-2">
+          <textarea
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            placeholder="Nhập tin nhắn..."
+            className="flex-1 p-3 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
+            rows={1}
           />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+          <button
+            type="submit"
+            className={`py-2 px-4 bg-blue-500 text-white rounded-lg shadow-md hover:bg-blue-600 transition ${
+              loading ? "opacity-50 cursor-not-allowed" : ""
+            }`}
+            disabled={loading}
+          >
+            {loading ? "..." : "Gửi"}
+          </button>
+        </form>
+      </div>
     </div>
   );
 }
